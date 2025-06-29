@@ -1,7 +1,18 @@
 // Filename: /api/getAiAnalysis.js (for a Vercel/Next.js style serverless function)
 
-// This function runs on your server and securely calls the real API.
 export default async function handler(req, res) {
+  // --- NEW: Add CORS Headers to give the extension permission ---
+  // This allows your Chrome extension to make requests to this server
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Allows all origins
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle pre-flight requests for CORS
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  // --- END of new CORS section ---
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).end('Method Not Allowed');
@@ -13,13 +24,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Ticker symbol is required' });
   }
 
-  // Get your secret API key from server environment variables
-  const apiKey = process.env.ALPHA_VANTAGE_API_KEY; // IMPORTANT: Name this exactly
+  const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'API key not configured on server' });
   }
 
-  // The Alpha Vantage API endpoint for news and sentiment
   const url = `https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers=${ticker}&apikey=${apiKey}`;
 
   try {
@@ -30,13 +39,11 @@ export default async function handler(req, res) {
 
     const data = await alphaVantageResponse.json();
 
-    // Check for API errors or rate limiting
     if (data['Note'] || data['Information']) {
         console.warn('Alpha Vantage API rate limit likely hit:', data);
         return res.status(429).json({ error: 'API call limit reached. Please try again later.' });
     }
     
-    // Process the data to create a clean result
     const feed = data.feed || [];
     const tickerData = feed.find(item => item.ticker_sentiment.some(t => t.ticker === ticker));
 
@@ -51,7 +58,6 @@ export default async function handler(req, res) {
       relevance: relevantTickerInfo.relevance_score
     };
 
-    // Send the structured data back to your Chrome extension
     return res.status(200).json(analysisResult);
 
   } catch (error) {
